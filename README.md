@@ -2,6 +2,12 @@
 
 ShareSafe is a video review app for people who need to share visual evidence while covering a specific private detail. For example, a seller can cover a shipping label while leaving damage on the same parcel visible.
 
+## Public judge demo
+
+[Open the sample-only judge demo](https://sharesafe-judge-demo.lovable.app/). It runs in the browser with fictional footage and illustrative tracking data, independently of the private server and its password.
+
+The standalone frontend lives in [`judge-demo/`](judge-demo/) and was imported from the [Lovable-derived demo source repository](https://github.com/Vinayak19112003/sharesafe-judge-demo-8c6e0b26). Run its own build and tests from that directory.
+
 ## Run locally
 
 Install Node.js 22 or newer and FFmpeg with `ffprobe` and `libx264` available on your PATH. There are no npm dependencies to install.

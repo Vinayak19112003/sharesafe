@@ -4,5 +4,5 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
-  "scripts": { "start": "node --env-file-if-exists=.env server.js", "test": "node --test" }
+  "scripts": { "start": "node --env-file-if-exists=.env server.js", "test": "node --test test/*.test.js" }
 }
