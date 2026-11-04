@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101818">
+  <title>ShareSafe — Evidence video review</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/" aria-label="ShareSafe home"><span class="mark" aria-hidden="true">◫</span> ShareSafe</a>
+    <span class="system" id="system">LOCAL WORKSPACE</span>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow"><span class="dot"></span> EVIDENCE VIDEO REVIEW</p>
+      <h1>Hide the label.<br><em>Keep the evidence.</em></h1>
+      <p class="lead">Cover customer details in a video before sharing it. Review the moving cover frame by frame, then export a silent MP4.</p>
+      <div class="actions">
+        <button class="primary" id="choose">Upload a clip <span aria-hidden="true">↗</span></button>
+        <input id="upload" type="file" accept=".mp4,.mov,video/mp4,video/quicktime" class="sr-only">
+      </div>
+      <p class="tiny">MP4 or MOV · Up to 15 seconds and 24 MiB</p>
+    </section>
+
+    <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
+
+    <section class="welcome" id="welcome" aria-label="How it works">
+      <article><p class="eyebrow">01 / LOAD</p><h2>Open a short clip.</h2><p>Upload your own MP4 or MOV. Choose manual review or opt in to Meta analysis.</p></article>
+      <article><p class="eyebrow">02 / REVIEW</p><h2>Check what’s covered.</h2><p>Find missing covers, draw corrections, and check that the evidence remains visible.</p></article>
+      <article><p class="eyebrow">03 / EXPORT</p><h2>Share the result.</h2><p>Confirm your review and download an MP4 with the covers baked into the video.</p></article>
+    </section>
+
+    <section class="workspace" id="workspace" hidden aria-label="Review workspace">
+      <div class="section-top">
+        <div><p class="eyebrow" id="source"></p><h2>Review your clip</h2></div>
+        <button class="quiet" id="remove">Delete clip</button>
+      </div>
+      <div class="desk">
+        <section class="player panel" aria-label="Frame viewer">
+          <div class="player-top"><span class="pill" id="frame-state"></span><button class="quiet" id="original" aria-pressed="false">Show original</button></div>
+          <div class="stage">
+            <canvas id="canvas" aria-label="Current video frame. Drag to draw an opaque cover after enabling Draw cover."></canvas>
+          </div>
+          <div class="transport">
+            <button id="play" class="quiet" aria-pressed="false">Play</button>
+            <button class="icon" id="prev" aria-label="Previous frame">‹</button>
+            <button class="icon" id="next" aria-label="Next frame">›</button>
+            <input id="scrub" type="range" value="0" min="0" max="0" aria-label="Video frame">
+            <output id="time">00.00 s</output>
+          </div>
+          <div id="timeline" class="timeline" aria-hidden="true"></div>
+          <div class="timeline-labels"><span><i class="key green"></i>Suggested or corrected</span><span><i class="key orange"></i>Review needed</span><span><i class="key gray"></i>Clear</span></div>
+        </section>
+        <aside class="panel controls">
+          <section>
+            <p class="eyebrow">01 / REVIEW</p>
+            <h3>Check the cover</h3>
+            <p id="review-copy">Go to the first missing or uncertain cover.</p>
+            <button class="button wide" id="gap">Next review frame <span aria-hidden="true">↗</span></button>
+            <div class="edit-buttons">
+              <button id="draw" aria-pressed="false">Draw cover</button>
+              <button id="clear">Mark clear</button>
+            </div>
+            <div class="range-edit">
+              <label for="through">Apply edit through frame</label>
+              <input id="through" type="number" min="1" value="1" max="1" inputmode="numeric">
+            </div>
+            <p class="tiny">Use a range only after checking the same edit fits every frame in it.</p>
+            <p class="tiny" id="preserve-hint"></p>
+          </section>
+          <section>
+            <p class="eyebrow">02 / EXPORT</p>
+            <label class="check"><input type="checkbox" id="approve"> I reviewed the clip and confirmed the private details are covered.</label>
+            <button id="export" class="primary wide" disabled>Export silent MP4 <span aria-hidden="true">↓</span></button>
+          </section>
+        </aside>
+      </div>
+
+      <details class="panel ai" id="ai">
+        <summary>Live Meta analysis <span class="pill" id="live-status"></span></summary>
+        <div class="ai-fields">
+          <label for="instruction">What should we hide and preserve?</label>
+          <textarea id="instruction" rows="2" maxlength="400">Hide the shipping label. Keep the damaged corner visible.</textarea>
+          <label class="check"><input type="checkbox" id="consent"> Send this clip or sampled frames to Meta for analysis.</label>
+          <button id="plan">Suggest targets with Muse Spark</button>
+          <div class="target-fields">
+            <label>Hide and track <input id="hide" maxlength="70" value="shipping label"></label>
+            <label>Preserve during review <input id="preserve" maxlength="70" value="damaged parcel corner"></label>
+          </div>
+          <button id="track">Track cover with SAM 3.1</button>
+          <p class="tiny">Live tracking replaces existing covers for this clip. The preserve target is a reminder for your review.</p>
+        </div>
+      </details>
+    </section>
+  </main>
+  <footer><span>ShareSafe / Prototype</span><span>Uploads stay on this server unless you choose live analysis.</span></footer>
+</body>
+</html>
