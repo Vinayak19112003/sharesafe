@@ -143,6 +143,7 @@ footer { display: flex; justify-content: space-between; gap: .45rem 1rem; flex-w
   .desk { grid-template-columns: 1fr; }
   .top { min-height: 54px; gap: .65rem; }
   .page-head { padding-top: 1.5rem; }
+  .live-demo .page-head { flex-direction: column; align-items: stretch; }
   .login-layout { grid-template-columns: 1fr; gap: 1rem; padding-top: 1.5rem; }
   .login-copy { display: contents; }
   .login-copy > .kicker, .login-copy > p:last-of-type { display: none; }

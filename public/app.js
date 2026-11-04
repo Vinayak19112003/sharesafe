@@ -22,18 +22,55 @@ function notice(text, error = false) {
   el('notice').textContent = text;
 }
 
-async function call(path, { method = 'GET', data, upload } = {}) {
-  const response = await fetch(path, {
-    method,
-    headers: upload ? { 'Content-Type': 'application/octet-stream' }
-      : data ? { 'Content-Type': 'application/json' } : undefined,
-    body: upload || (data ? JSON.stringify(data) : undefined),
-  });
-  if (!response.ok) throw new Error((await response.json()).error || 'The request failed.');
+const connectionError = () => Object.assign(new Error('Could not reach ShareSafe. Check your connection and try again.'), { retryable: true });
+const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+async function call(path, { method = 'GET', data, upload, signal } = {}) {
+  let response;
+  try {
+    response = await fetch(path, {
+      method,
+      headers: upload ? { 'Content-Type': 'application/octet-stream' }
+        : data ? { 'Content-Type': 'application/json' } : undefined,
+      body: upload || (data ? JSON.stringify(data) : undefined),
+      signal,
+    });
+  } catch {
+    throw connectionError();
+  }
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null);
+    if (!problem?.error && response.status >= 500) throw connectionError();
+    throw new Error(problem?.error || `ShareSafe could not finish this request (HTTP ${response.status}). Try again.`);
+  }
   return response;
 }
 
 const pathFor = action => demoMode ? '/api/live-demo/' + action : `/api/jobs/${clip.id}${action ? '/' + action : ''}`;
+
+async function liveRequest(action, options) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const response = await call(pathFor(action), { ...options, signal: AbortSignal.timeout(8000) });
+      return await response.json().catch(() => { throw connectionError(); });
+    } catch (error) {
+      if (!error.retryable || attempt === 2) throw error;
+      await pause(1000 * (attempt + 1));
+    }
+  }
+}
+
+async function waitForLiveAnalysis() {
+  const { id, shared } = await liveRequest('analyze', { method: 'POST', data: { consent: true } });
+  const deadline = Date.now() + 145_000;
+  while (Date.now() < deadline) {
+    const run = await liveRequest('analysis/' + id);
+    if (run.status === 'complete') return { ...run.result, shared };
+    await pause(1500);
+  }
+  throw new Error('Meta is taking longer than expected. Tap Run live Meta analysis to check again.');
+}
+
 function unresolved(frame, index) {
   if (frame.state === 'gap' || frame.state === 'uncertain') return true;
   if (!demoMode) return false;
@@ -370,8 +407,7 @@ async function initLiveDemo() {
     void task('Calling Muse Spark 1.3 and SAM 3.1 with the fictional sample…', async () => {
       el('live-run-state').textContent = 'Calling Meta';
       try {
-        const response = await call(pathFor('analyze'), { method: 'POST', data: { consent: true } });
-        const data = await response.json();
+        const data = await waitForLiveAnalysis();
         clip.frames = data.frames;
         analyzed = true;
         el('approve').checked = false;

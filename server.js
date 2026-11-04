@@ -201,7 +201,11 @@ const server = createServer(async (request, response) => {
       if ((await readJson(request))?.consent !== true) {
         throw new HttpError(400, 'Choose to send the fictional sample to Meta first.');
       }
-      return json(response, 200, await liveDemo.analyze());
+      return json(response, 202, liveDemo.startAnalysis());
+    }
+    const analysis = path.match(/^\/api\/live-demo\/analysis\/([a-f0-9-]{36})$/);
+    if (method === 'GET' && analysis) {
+      return json(response, 200, liveDemo.getAnalysis(analysis[1]));
     }
     if (method === 'POST' && path === '/api/live-demo/export') {
       if (request.headers['sec-fetch-site'] !== 'same-origin') {
