@@ -60,15 +60,20 @@ async function liveRequest(action, options) {
   }
 }
 
-async function waitForLiveAnalysis() {
-  const { id, shared } = await liveRequest('analyze', { method: 'POST', data: { consent: true } });
+async function waitForAnalysis(action, data) {
+  const { id, shared } = await liveRequest(action, { method: 'POST', data });
   const deadline = Date.now() + 145_000;
   while (Date.now() < deadline) {
     const run = await liveRequest('analysis/' + id);
-    if (run.status === 'complete') return { ...run.result, shared };
+    if (run.status === 'complete') return shared === undefined ? run.result : { ...run.result, shared };
     await pause(1500);
   }
-  throw new Error('Meta is taking longer than expected. Tap Run live Meta analysis to check again.');
+  throw new Error('Meta is taking longer than expected. Try the analysis again.');
+}
+
+async function analyzeUpload(action, data) {
+  if (clip.background) return waitForAnalysis(action, data);
+  return (await call(pathFor(action), { method: 'POST', data })).json();
 }
 
 function unresolved(frame, index) {
@@ -230,7 +235,7 @@ el('upload').addEventListener('change', event => {
     const previous = clip;
     const result = await call('/api/upload', { method: 'POST', upload: file });
     clip = { ...await result.json(), name: file.name };
-    if (previous) void call(`/api/jobs/${previous.id}`, { method: 'DELETE' }).catch(() => {});
+    if (previous && !clip.background) void call(`/api/jobs/${previous.id}`, { method: 'DELETE' }).catch(() => {});
     images = new Map();
     paintedFrame = -1;
     canvas.width = clip.width;
@@ -352,9 +357,7 @@ canvas.addEventListener('pointercancel', () => { drag = undefined; void paint();
 for (const id of ['consent', 'approve', 'preserve']) el(id).addEventListener('input', update);
 
 el('plan').addEventListener('click', () => void task('Muse Spark is reading sampled frames…', async () => {
-  const response = await call(pathFor('plan'), { method: 'POST',
-    data: { consent: el('consent').checked, instruction: el('instruction').value } });
-  const plan = await response.json();
+  const plan = await analyzeUpload('plan', { consent: el('consent').checked, instruction: el('instruction').value });
   el('hide').value = plan.hide;
   el('preserve').value = plan.preserve;
   notice('Targets suggested. Check the wording before tracking.');
@@ -363,9 +366,8 @@ el('track').addEventListener('click', () => {
   if (clip.frames.some(frame => ['manual', 'clear'].includes(frame.state))
       && !window.confirm('Replace your existing edits with a fresh track?')) return;
   void task('SAM 3.1 is tracking the selected target…', async () => {
-    const response = await call(pathFor('track'), { method: 'POST',
-      data: { consent: el('consent').checked, target: el('hide').value } });
-    clip.frames = (await response.json()).frames;
+    const result = await analyzeUpload('track', { consent: el('consent').checked, target: el('hide').value });
+    clip.frames = result.frames;
     el('approve').checked = false;
     notice(clip.frames.some(frame => frame.box)
       ? 'Tracking complete. Review uncertain frames and confirm the clip.'
@@ -407,7 +409,7 @@ async function initLiveDemo() {
     void task('Calling Muse Spark 1.3 and SAM 3.1 with the fictional sample…', async () => {
       el('live-run-state').textContent = 'Calling Meta';
       try {
-        const data = await waitForLiveAnalysis();
+        const data = await waitForAnalysis('analyze', { consent: true });
         clip.frames = data.frames;
         analyzed = true;
         el('approve').checked = false;

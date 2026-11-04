@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f7f3">
-  <title>Sign in · ShareSafe</title>
+  <title>Open workspace · ShareSafe</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body class="login-page">
@@ -12,7 +12,7 @@
     <a class="brand" href="/" aria-label="ShareSafe home"><span class="mark" aria-hidden="true"><i></i></span>ShareSafe</a>
     <span class="top-divider" aria-hidden="true"></span>
     <span class="top-label">Video redaction</span>
-    <span class="system">Private demo</span>
+    <span class="system"><!-- LOGIN_MODE --></span>
   </header>
   <main class="login-layout">
     <section class="login-copy">
@@ -36,11 +36,10 @@
     <section class="panel login-card" aria-labelledby="login-title">
       <p class="kicker">DEMO ACCESS</p>
       <h2 id="login-title">Open the workspace</h2>
-      <p>Use the ShareSafe demo password.</p>
+      <p><!-- LOGIN_HINT --></p>
       <!-- LOGIN_ERROR -->
       <form method="post" action="/login">
-        <label for="password">Demo password</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+        <!-- LOGIN_FIELD -->
         <button type="submit" class="primary wide">Open workspace <span aria-hidden="true">→</span></button>
       </form>
     </section>

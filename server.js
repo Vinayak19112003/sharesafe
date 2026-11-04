@@ -16,41 +16,64 @@ const MAX_UPLOAD = 24 * 1024 * 1024;
 const TTL = 30 * 60 * 1000;
 const apiKey = process.env.META_MODEL_API_KEY || process.env.MODEL_API_KEY || process.env.MUSE_API_KEY;
 const meta = apiKey ? metaClient(apiKey) : null;
+const guestMode = process.env.SHARESAFE_GUEST_MODE === '1';
 const demoPassword = process.env.SHARESAFE_DEMO_PASSWORD;
 const digest = value => createHash('sha256').update(value).digest();
 const expectedAuth = demoPassword && digest('Basic ' + Buffer.from('judge:' + demoPassword).toString('base64'));
 const passwordDigest = demoPassword && digest(demoPassword);
 const cookieKey = randomBytes(32);
 const cookieName = 'sharesafe_session';
+const guestCookie = 'sharesafe_guest';
 const sessionSeconds = 8 * 60 * 60;
 const signSession = value => createHmac('sha256', cookieKey).update(value).digest('hex');
 
-function signedIn(request) {
-  if (!expectedAuth) return true;
-  if (timingSafeEqual(expectedAuth, digest(request.headers.authorization ?? ''))) return true;
-  const cookie = request.headers.cookie?.match(/(?:^|;\s*)sharesafe_session=(\d+\.[a-f0-9]{32})\.([a-f0-9]{64})(?:;|$)/);
-  return !!cookie && Number(cookie[1].split('.')[0]) > Date.now()
-    && timingSafeEqual(Buffer.from(signSession(cookie[1]), 'hex'), Buffer.from(cookie[2], 'hex'));
+function sessionId(request, name) {
+  const cookie = request.headers.cookie?.match(new RegExp(`(?:^|;\\s*)${name}=(\\d+\\.[a-f0-9]{32})\\.([a-f0-9]{64})(?:;|$)`));
+  if (!cookie || Number(cookie[1].split('.')[0]) <= Date.now()) return null;
+  return timingSafeEqual(Buffer.from(signSession(name + cookie[1]), 'hex'), Buffer.from(cookie[2], 'hex'))
+    ? cookie[1] : null;
 }
 
-function setSession(request, response) {
+function signedIn(request) {
+  return !expectedAuth || timingSafeEqual(expectedAuth, digest(request.headers.authorization ?? ''))
+    || !!sessionId(request, cookieName);
+}
+
+function setSession(request, response, name = cookieName) {
   const value = `${Date.now() + sessionSeconds * 1000}.${randomBytes(16).toString('hex')}`;
   const secure = process.env.HOST === '0.0.0.0'
     || request.headers['x-forwarded-proto']?.split(',')[0].trim() === 'https';
   response.writeHead(303, {
     Location: '/',
-    'Set-Cookie': `${cookieName}=${value}.${signSession(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${secure ? '; Secure' : ''}`,
+    'Set-Cookie': `${name}=${value}.${signSession(name + value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${secure ? '; Secure' : ''}`,
   }).end();
 }
 
 async function loginPage(response, rejected = false) {
   const html = await readFile(join(ROOT, 'public', 'login.html'), 'utf8');
-  const error = rejected ? '<p class="notice error" role="alert">That password did not match. Try again.</p>' : '';
-  response.writeHead(rejected ? 401 : 200, { 'Content-Type': 'text/html; charset=utf-8' });
-  response.end(html.replace('<!-- LOGIN_ERROR -->', error));
+  const message = guestMode ? 'Enter a name of 1 to 60 characters.' : 'That password did not match. Try again.';
+  const error = rejected ? `<p class="notice error" role="alert">${message}</p>` : '';
+  const field = guestMode
+    ? '<label for="name">Your name</label><input id="name" name="name" type="text" autocomplete="given-name" maxlength="60" required>'
+    : '<label for="password">Demo password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>';
+  response.writeHead(rejected ? (guestMode ? 400 : 401) : 200, { 'Content-Type': 'text/html; charset=utf-8' });
+  response.end(html.replace('<!-- LOGIN_ERROR -->', error).replace('<!-- LOGIN_FIELD -->', field)
+    .replace('<!-- LOGIN_HINT -->', guestMode ? 'Enter a name to start a guest session.' : 'Use the ShareSafe demo password.')
+    .replace('<!-- LOGIN_MODE -->', guestMode ? 'Guest workspace' : 'Private demo'));
 }
 const jobs = new Map();
 let preparing = 0;
+const guestsPreparing = new Set();
+let guestCalls = [];
+
+function reserveGuestCall(owner) {
+  const now = Date.now();
+  guestCalls = guestCalls.filter(call => now - call.time < 60 * 60 * 1000);
+  if (guestCalls.length >= 16 || guestCalls.filter(call => call.owner === owner).length >= 4) {
+    throw new HttpError(429, 'The live AI limit has been reached. You can still draw covers and export manually.');
+  }
+  guestCalls.push({ owner, time: now });
+}
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -105,9 +128,12 @@ async function readJson(request) {
   }
 }
 
-async function makeJob(request) {
+async function makeJob(request, owner) {
+  const previous = owner && [...jobs.values()].find(job => job.owner === owner);
+  if (owner && (guestsPreparing.has(owner) || previous?.busy)) throw new HttpError(409, 'Wait for the current clip to finish processing.');
   if (preparing >= 2 || jobs.size + preparing >= 8) throw new HttpError(503, 'The workspace is busy. Delete an old clip and try again.');
   preparing++;
+  if (owner) guestsPreparing.add(owner);
   let directory;
   try {
     directory = await mkdtemp(join(tmpdir(), 'sharesafe-'));
@@ -123,17 +149,21 @@ async function makeJob(request) {
     const { count, width, height, fps } = job;
     const frames = Array.from({ length: count }, () => ({ box: null, state: 'gap' }));
     const id = randomUUID();
-    jobs.set(id, { ...job, id, directory, expires: Date.now() + TTL });
-    return { id, count, width, height, fps, frames, live: !!meta };
+    if (previous?.busy) throw new HttpError(409, 'Wait for the current clip to finish processing.');
+    if (previous) await removeJob(previous);
+    jobs.set(id, { ...job, id, owner, directory, expires: Date.now() + TTL });
+    return { id, count, width, height, fps, frames, live: !!meta, background: !!owner };
   } catch (error) {
     if (directory) await rm(directory, { recursive: true, force: true });
     throw error;
   } finally {
     preparing--;
+    if (owner) guestsPreparing.delete(owner);
   }
 }
 
 async function runJob(job, work) {
+  if (jobs.get(job.id) !== job) throw new HttpError(404, 'This clip is unavailable. Upload it again.');
   if (job.busy) throw new HttpError(409, 'This clip is already being processed.');
   job.busy = true;
   try {
@@ -178,8 +208,14 @@ const server = createServer(async (request, response) => {
         && request.headers['sec-fetch-site'] && request.headers['sec-fetch-site'] !== 'same-origin') {
       throw new HttpError(403, 'Open the app directly to make changes.');
     }
-    if (method === 'POST' && path === '/login' && passwordDigest) {
+    if (method === 'POST' && path === '/login' && (guestMode || passwordDigest)) {
       const form = new URLSearchParams((await body(request, 4096)).toString());
+      if (guestMode) {
+        const name = form.get('name')?.trim();
+        if (!name || name.length > 60 || /[\x00-\x1f\x7f]/.test(name)) return await loginPage(response, true);
+        if (sessionId(request, guestCookie)) return response.writeHead(303, { Location: '/' }).end();
+        return setSession(request, response, guestCookie);
+      }
       const password = form.get('password') ?? '';
       if (!timingSafeEqual(passwordDigest, digest(password))) return await loginPage(response, true);
       return setSession(request, response);
@@ -219,7 +255,8 @@ const server = createServer(async (request, response) => {
       response.end(video);
       return;
     }
-    if (!signedIn(request) && !(method === 'GET' && ['/style.css', '/app.js'].includes(path))) {
+    const owner = guestMode ? sessionId(request, guestCookie) : null;
+    if (!(guestMode ? owner : signedIn(request)) && !(method === 'GET' && ['/style.css', '/app.js'].includes(path))) {
       if (method === 'GET' && path === '/') return await loginPage(response);
       return json(response, 401, { error: 'Open the ShareSafe sign-in page to continue.' });
     }
@@ -229,13 +266,19 @@ const server = createServer(async (request, response) => {
     }
     if (method === 'GET' && path === '/api/status') return json(response, 200, { live: !!meta });
     if (method === 'POST' && path === '/api/upload') {
-      return json(response, 201, await makeJob(request));
+      return json(response, 201, await makeJob(request, owner));
     }
-    const match = path.match(/^\/api\/jobs\/([a-f0-9-]{36})(?:\/(frame\/\d+|plan|track|export))?$/);
+    const match = path.match(/^\/api\/jobs\/([a-f0-9-]{36})(?:\/(frame\/\d+|analysis\/[a-f0-9-]{36}|plan|track|export))?$/);
     const job = match && jobs.get(match[1]);
-    if (!job) throw new HttpError(404, 'This clip is unavailable. Upload it again.');
+    if (!job || job.owner !== owner) throw new HttpError(404, 'This clip is unavailable. Upload it again.');
     job.expires = Date.now() + TTL;
     const action = match[2];
+    if (method === 'GET' && action?.startsWith('analysis/')) {
+      const run = job.analysis;
+      if (run?.id !== action.slice(9)) throw new HttpError(404, 'This analysis is unavailable. Run it again.');
+      if (run.status === 'failed') throw new HttpError(502, 'Meta analysis did not complete. Try again in a moment.');
+      return json(response, 200, { status: run.status, result: run.result });
+    }
     if (method === 'GET' && action?.startsWith('frame/')) {
       const index = Number(action.slice(6));
       if (index >= job.count) throw new HttpError(404, 'Frame not found.');
@@ -253,10 +296,26 @@ const server = createServer(async (request, response) => {
       if (payload?.consent !== true) throw new HttpError(400, 'Confirm that you want to send this footage to Meta.');
       const value = action === 'plan' ? payload.instruction : payload.target;
       if (!shortText(value, action === 'plan' ? 400 : 70)) throw new HttpError(400, 'Enter a short instruction or object name.');
+      const analyze = async () => action === 'plan' ? meta.plan(job, value.trim()) : { frames: await meta.track(job, value.trim()) };
+      if (owner) {
+        if (jobs.get(job.id) !== job) throw new HttpError(404, 'This clip is unavailable. Upload it again.');
+        if (job.busy) {
+          const run = job.analysis;
+          if (run?.status === 'running' && run.action === action && run.value === value.trim()) return json(response, 202, { id: run.id });
+          throw new HttpError(409, 'This clip is already being processed.');
+        }
+        reserveGuestCall(owner);
+        const run = { id: randomUUID(), action, value: value.trim(), status: 'running' };
+        job.analysis = run;
+        void runJob(job, analyze).then(result => {
+          run.result = result;
+          run.status = 'complete';
+        }, () => { run.status = 'failed'; });
+        return json(response, 202, { id: run.id });
+      }
       return await runJob(job, async () => {
         try {
-          if (action === 'plan') return json(response, 200, await meta.plan(job, value.trim()));
-          return json(response, 200, { frames: await meta.track(job, value.trim()) });
+          return json(response, 200, await analyze());
         } catch (error) {
           throw new HttpError(502, `Live analysis failed. ${error.message}`);
         }
@@ -290,8 +349,8 @@ const server = createServer(async (request, response) => {
 });
 
 export function start(port = Number(process.env.PORT || 3000), host = process.env.HOST || '127.0.0.1') {
-  if (meta && !expectedAuth && !['127.0.0.1', '::1', 'localhost'].includes(host)) {
-    throw new Error('Set SHARESAFE_DEMO_PASSWORD before enabling Meta on a non-loopback address.');
+  if (meta && !guestMode && !expectedAuth && !['127.0.0.1', '::1', 'localhost'].includes(host)) {
+    throw new Error('Set SHARESAFE_DEMO_PASSWORD or explicitly enable SHARESAFE_GUEST_MODE before hosting Meta.');
   }
   server.listen(port, host);
   const cleanup = setInterval(() => {

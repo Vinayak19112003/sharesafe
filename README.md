@@ -43,7 +43,9 @@ docker build -t sharesafe .
 docker run --rm -p 127.0.0.1:3000:3000 sharesafe
 ```
 
-For an HTTPS demo hosted on Docker Agentic Platform, set a strong `SHARESAFE_DEMO_PASSWORD` in the server environment before opening the sandbox port. Open the HTTPS URL and enter the demo password on the ShareSafe sign-in page. Keep `META_MODEL_API_KEY` on the server and use the provider's host-scoped secret configuration when available. Live Meta mode requires the password when the app binds to a non-loopback address.
+For a name-only HTTPS demo, set `SHARESAFE_GUEST_MODE=1`. Each guest session is isolated by a browser cookie, and a name is used only to enter the workspace. A guest can keep one clip at a time. Uploaded clips require consent before being sent to Meta, and the server allows up to four AI calls per guest and sixteen guest AI calls total per hour. Manual covers and export remain available at the AI limit. Use fictional clips in public demos.
+
+For a password-protected HTTPS demo, leave guest mode disabled and set a strong `SHARESAFE_DEMO_PASSWORD` in the server environment before opening the sandbox port. Open the HTTPS URL and enter the demo password on the ShareSafe sign-in page. Keep `META_MODEL_API_KEY` on the server and use the provider's host-scoped secret configuration when available. On a non-loopback address, the server requires guest mode or a password before enabling live Meta analysis.
 
 ## Verify
 
