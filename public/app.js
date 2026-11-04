@@ -1,6 +1,8 @@
 const el = id => document.getElementById(id);
 const canvas = el('canvas');
 const context = canvas.getContext('2d', { alpha: false });
+const demoMode = typeof location !== 'undefined' && location.pathname === '/live-demo';
+let analyzed = false;
 const stateNames = { gap: 'Missing cover', uncertain: 'Uncertain match', suggested: 'Suggested cover', manual: 'Corrected cover', clear: 'Marked clear' };
 let clip;
 let current = 0;
@@ -31,8 +33,17 @@ async function call(path, { method = 'GET', data, upload } = {}) {
   return response;
 }
 
-const pathFor = action => `/api/jobs/${clip.id}${action ? '/' + action : ''}`;
-const unresolved = frame => frame.state === 'gap' || frame.state === 'uncertain';
+const pathFor = action => demoMode ? '/api/live-demo/' + action : `/api/jobs/${clip.id}${action ? '/' + action : ''}`;
+function unresolved(frame, index) {
+  if (frame.state === 'gap' || frame.state === 'uncertain') return true;
+  if (!demoMode) return false;
+  if (!frame.box) return true;
+  const [left, top, right, bottom] = frame.box;
+  const [x1, y1, x2, y2] = clip.reference[index];
+  const [ex1, ey1, ex2, ey2] = clip.evidence;
+  return left > x1 || top > y1 || right < x2 || bottom < y2
+    || (left < ex2 && right > ex1 && top < ey2 && bottom > ey1);
+}
 
 function update() {
   el('choose').disabled = busy;
@@ -43,6 +54,11 @@ function update() {
   if (!clip) return;
   const frame = clip.frames[current];
   const gaps = clip.frames.filter(unresolved).length;
+  if (demoMode) {
+    el('run-live').disabled = busy || !clip.live;
+    el('repair-sample').hidden = !analyzed || gaps === 0;
+    el('repair-sample').disabled = busy;
+  }
   el('source').textContent = `${clip.name} · ${clip.count} frames`;
   el('scrub').max = clip.count - 1;
   el('scrub').value = current;
@@ -50,7 +66,7 @@ function update() {
   el('through').max = clip.count;
   el('time').textContent = `${(current / clip.fps).toFixed(2)} s`;
   el('frame-state').textContent = `FRAME ${current + 1} / ${stateNames[frame.state]}`;
-  el('frame-state').classList.toggle('review', unresolved(frame));
+  el('frame-state').classList.toggle('review', unresolved(frame, current));
   el('review-copy').textContent = gaps ? `${gaps} frame${gaps === 1 ? '' : 's'} need a review decision.` : 'All frames have a decision. Play the clip to verify the cover and evidence.';
   el('preserve-hint').textContent = el('preserve').value.trim() ? 'Keep visible: ' + el('preserve').value.trim() : '';
   el('live-status').textContent = clip.live ? 'Available' : 'Manual only';
@@ -60,8 +76,8 @@ function update() {
   el('draw').disabled = busy || paintedFrame !== current;
   el('clear').disabled = busy;
   el('remove').disabled = busy;
-  el('approve').disabled = busy || gaps > 0;
-  el('export').disabled = busy || !!gaps || !el('approve').checked || !clip.frames.some(frame => frame.box);
+  el('approve').disabled = busy || gaps > 0 || (demoMode && !analyzed);
+  el('export').disabled = el('approve').disabled || !el('approve').checked || !clip.frames.some(frame => frame.box);
   el('play').textContent = playing ? 'Pause' : 'Play';
   el('play').setAttribute('aria-pressed', playing);
   el('draw').setAttribute('aria-pressed', drawing);
@@ -73,7 +89,7 @@ function update() {
     el('timeline').replaceChildren(...clip.frames.map(() => document.createElement('i')));
   }
   for (const [index, segment] of [...el('timeline').children].entries()) {
-    segment.dataset.state = clip.frames[index].state;
+    segment.dataset.state = unresolved(clip.frames[index], index) ? 'gap' : clip.frames[index].state;
     segment.classList.toggle('active', index === current);
   }
 }
@@ -209,7 +225,7 @@ el('timeline').addEventListener('click', event => {
   if (index >= 0) void jump(index);
 });
 el('gap').addEventListener('click', () => {
-  const index = clip.frames.findIndex((frame, index) => index > current && unresolved(frame));
+  const index = clip.frames.findIndex((frame, index) => index > current && unresolved(frame, index));
   void jump(index >= 0 ? index : clip.frames.findIndex(unresolved));
 });
 el('play').addEventListener('click', async () => {
@@ -325,12 +341,74 @@ el('export').addEventListener('click', () => void task('Rendering a silent MP4 w
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'sharesafe-redacted.mp4';
+  link.download = demoMode ? 'sharesafe-live-demo.mp4' : 'sharesafe-redacted.mp4';
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
   notice('Redacted MP4 downloaded.');
 }));
 
-call('/api/status').then(response => response.json()).then(({ live }) => {
+async function initLiveDemo() {
+  document.title = 'ShareSafe · Live Meta judge demo';
+  document.body.classList.add('live-demo');
+  el('page-kicker').textContent = 'LIVE META API';
+  el('page-title').textContent = 'Redact a location clue';
+  el('page-description').textContent = 'Hide the stop sign, keep the orange cone visible, then export a redacted MP4.';
+  el('system').textContent = 'Loading sample';
+  el('choose').hidden = true;
+  el('remove').hidden = true;
+  el('clear').hidden = true;
+  el('ai').hidden = true;
+  el('live-panel').hidden = false;
+  el('run-live').hidden = false;
+  el('run-live').disabled = true;
+  el('preserve').value = 'orange traffic cone';
+  el('privacy-note').textContent = 'Public demo uses a fixed fictional sample. No account or uploads required.';
+  el('run-live').addEventListener('click', () => {
+    if (analyzed && !window.confirm('Replace the current covers with the latest Meta result?')) return;
+    void task('Calling Muse Spark 1.3 and SAM 3.1 with the fictional sample…', async () => {
+      el('live-run-state').textContent = 'Calling Meta';
+      try {
+        const response = await call(pathFor('analyze'), { method: 'POST', data: { consent: true } });
+        const data = await response.json();
+        clip.frames = data.frames;
+        analyzed = true;
+        el('approve').checked = false;
+        el('live-results').hidden = false;
+        el('spark-result').textContent = `Hide ${data.plan.hide} · Preserve ${data.plan.preserve}`;
+        el('sam-result').textContent = `Tracked ${data.target} on ${data.matched}/${clip.count} frames`;
+        el('live-run-state').textContent = data.shared ? 'Recent API result' : 'Live API result';
+        el('live-explanation').textContent = `Meta response received at ${new Date(data.completedAt).toLocaleTimeString()}. Review the covers before exporting.`;
+        const next = clip.frames.findIndex(unresolved);
+        if (next >= 0) void jump(next);
+        notice(next >= 0 ? 'Meta returned results. Check highlighted frames and correct any missed cover.'
+          : 'Meta returned results. Play the clip, confirm the review, and export.');
+      } catch (error) {
+        el('live-run-state').textContent = 'Try again';
+        throw error;
+      }
+    });
+  });
+  el('repair-sample').addEventListener('click', () => {
+    clip.frames = clip.frames.map((frame, index) => unresolved(frame, index)
+      ? { box: clip.reference[index], state: 'manual' } : frame);
+    el('approve').checked = false;
+    update();
+    void paint();
+    notice('Reference covers applied to the highlighted sample frames. Play the clip before confirming.');
+  });
+  try {
+    clip = await (await call(pathFor('sample'))).json();
+    canvas.width = clip.width;
+    canvas.height = clip.height;
+    el('system').textContent = clip.live ? 'Meta API ready' : 'Meta API unavailable';
+    void seek(0);
+  } catch (error) {
+    el('system').textContent = 'Sample unavailable';
+    notice(error.message, true);
+  }
+}
+
+if (demoMode) void initLiveDemo();
+else call('/api/status').then(response => response.json()).then(({ live }) => {
   el('system').textContent = live ? 'Meta connected' : 'Manual review';
 }).catch(() => {});

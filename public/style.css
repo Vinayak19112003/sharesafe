@@ -156,3 +156,10 @@ footer { display: flex; justify-content: space-between; gap: .45rem 1rem; flex-w
   .page-head button { flex-shrink: 0; }
   .diagram-caption { font-size: .61rem; }
 }
+
+.live-demo #welcome { display: none; }
+.live-results { display: grid; gap: .65rem; margin: .75rem 0 0; }
+.live-results div { border-top: 1px solid var(--line); padding-top: .55rem; }
+.live-results dt { font: 650 .7rem var(--mono); color: var(--accent); }
+.live-results dd { margin: .22rem 0 0; font-size: .83rem; }
+#repair-sample { margin-top: .65rem; }

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { validBox } from './lib/geometry.js';
 import { metaClient } from './lib/meta.js';
+import { createLiveDemo } from './lib/live-demo.js';
 import { prepareVideo, renderVideo } from './lib/video.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -57,6 +58,9 @@ class HttpError extends Error {
     this.status = status;
   }
 }
+
+const liveDemo = createLiveDemo(meta, join(ROOT, 'media', 'live-sample.mp4'),
+  (status, message) => new HttpError(status, message));
 
 const staticFiles = {
   '/': ['public/index.html', 'text/html; charset=utf-8'],
@@ -180,7 +184,38 @@ const server = createServer(async (request, response) => {
       if (!timingSafeEqual(passwordDigest, digest(password))) return await loginPage(response, true);
       return setSession(request, response);
     }
-    if (!signedIn(request) && !(method === 'GET' && path === '/style.css')) {
+    if (method === 'GET' && path === '/live-demo') {
+      return await sendFile(response, join(ROOT, 'public', 'index.html'), 'text/html; charset=utf-8');
+    }
+    if (method === 'GET' && path === '/api/live-demo/sample') {
+      return json(response, 200, await liveDemo.getSample());
+    }
+    const sampleFrame = path.match(/^\/api\/live-demo\/frame\/(\d{1,3})$/);
+    if (method === 'GET' && sampleFrame) {
+      return await sendFile(response, await liveDemo.getFrame(Number(sampleFrame[1])), 'image/jpeg');
+    }
+    if (method === 'POST' && path === '/api/live-demo/analyze') {
+      if (request.headers['sec-fetch-site'] !== 'same-origin') {
+        throw new HttpError(403, 'Open the demo directly to run live analysis.');
+      }
+      if ((await readJson(request))?.consent !== true) {
+        throw new HttpError(400, 'Choose to send the fictional sample to Meta first.');
+      }
+      return json(response, 200, await liveDemo.analyze());
+    }
+    if (method === 'POST' && path === '/api/live-demo/export') {
+      if (request.headers['sec-fetch-site'] !== 'same-origin') {
+        throw new HttpError(403, 'Open the demo directly to export.');
+      }
+      const video = await liveDemo.export(await readJson(request), exportBoxes);
+      response.writeHead(200, {
+        'Content-Type': 'video/mp4', 'Content-Length': video.length,
+        'Content-Disposition': 'attachment; filename="sharesafe-live-demo.mp4"',
+      });
+      response.end(video);
+      return;
+    }
+    if (!signedIn(request) && !(method === 'GET' && ['/style.css', '/app.js'].includes(path))) {
       if (method === 'GET' && path === '/') return await loginPage(response);
       return json(response, 401, { error: 'Open the ShareSafe sign-in page to continue.' });
     }
@@ -262,6 +297,7 @@ export function start(port = Number(process.env.PORT || 3000), host = process.en
   }, 60_000).unref();
   server.once('close', () => {
     clearInterval(cleanup);
+    void liveDemo.close().catch(() => {});
     for (const job of jobs.values()) void removeJob(job).catch(() => {});
   });
   return server;

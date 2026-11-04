@@ -4,7 +4,9 @@ ShareSafe is a video review app for people who need to share visual evidence whi
 
 ## Public judge demo
 
-[Open the sample-only judge demo](https://sharesafe-judge-demo.lovable.app/). It runs in the browser with fictional footage and illustrative tracking data, independently of the private server and its password.
+Open `/live-demo` on the running ShareSafe server. The public page uses a fixed fictional roadside clip. After you choose **Run live Meta analysis**, the server calls Muse Spark 1.3 to plan the redaction and SAM 3.1 to track the stop sign. Review the tracking, fill any gaps, then approve and download a silent MP4. The orange cone must stay visible. The demo shares recent real API results to bound usage. The public page has no uploads or open-ended prompts.
+
+The [standalone Lovable preview](https://sharesafe-judge-demo.lovable.app/) uses illustrative tracking data.
 
 The standalone frontend lives in [`judge-demo/`](judge-demo/) and was imported from the [Lovable-derived demo source repository](https://github.com/Vinayak19112003/sharesafe-judge-demo-8c6e0b26). Run its own build and tests from that directory.
 
