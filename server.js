@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -15,6 +15,9 @@ const MAX_UPLOAD = 24 * 1024 * 1024;
 const TTL = 30 * 60 * 1000;
 const apiKey = process.env.META_MODEL_API_KEY || process.env.MODEL_API_KEY || process.env.MUSE_API_KEY;
 const meta = apiKey ? metaClient(apiKey) : null;
+const demoPassword = process.env.SHARESAFE_DEMO_PASSWORD;
+const digest = value => createHash('sha256').update(value).digest();
+const expectedAuth = demoPassword && digest('Basic ' + Buffer.from('judge:' + demoPassword).toString('base64'));
 const jobs = new Map();
 let preparing = 0;
 
@@ -133,6 +136,10 @@ const server = createServer(async (request, response) => {
   response.setHeader('Cache-Control', 'no-store');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'no-referrer');
+  if (expectedAuth && !timingSafeEqual(expectedAuth, digest(request.headers.authorization ?? ''))) {
+    response.setHeader('WWW-Authenticate', 'Basic realm="ShareSafe"');
+    return json(response, 401, { error: 'Sign in to the ShareSafe demo.' });
+  }
   response.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
   try {
     const path = new URL(request.url, 'http://localhost').pathname;
@@ -208,6 +215,9 @@ const server = createServer(async (request, response) => {
 });
 
 export function start(port = Number(process.env.PORT || 3000), host = process.env.HOST || '127.0.0.1') {
+  if (meta && !expectedAuth && !['127.0.0.1', '::1', 'localhost'].includes(host)) {
+    throw new Error('Set SHARESAFE_DEMO_PASSWORD before enabling Meta on a non-loopback address.');
+  }
   server.listen(port, host);
   const cleanup = setInterval(() => {
     for (const job of jobs.values()) {

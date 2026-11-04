@@ -28,6 +28,15 @@ Copy `.env.example` to `.env`, set `META_MODEL_API_KEY` locally and restart the 
 - **SAM 3.1** tracks the hide target in the normalized video. ShareSafe reads the documented source-frame indices and bounding boxes and adds a margin before applying a solid cover. Missing frames, frames with multiple candidates, and low-confidence matches require a review decision. The live integration handles one tracked target per clip. Human review is required because a confident match can still cover the wrong object or miss private pixels.
 - Manual mode requires neither a Meta key nor a network call to Meta. A consent checkbox gates both live actions. The app uses temporary local files and sends Meta requests only from the server.
 
+## Run with Docker
+
+```sh
+docker build -t sharesafe .
+docker run --rm -p 127.0.0.1:3000:3000 sharesafe
+```
+
+For an HTTPS demo hosted on Docker Agentic Platform, set a strong `SHARESAFE_DEMO_PASSWORD` in the server environment before opening the sandbox port. The sign-in username is `judge`. Keep `META_MODEL_API_KEY` on the server and use the provider's host-scoped secret configuration when available. Live Meta mode requires the password when the app binds to a non-loopback address.
+
 ## Verify
 
 ```sh
