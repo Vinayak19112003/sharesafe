@@ -11,6 +11,7 @@ let drawing = false;
 let original = false;
 let drag;
 let previewRequest = 0;
+let paintedFrame = -1;
 let images = new Map();
 
 function notice(text, error = false) {
@@ -55,7 +56,7 @@ function update() {
   el('plan').disabled = busy || !clip.live || !el('consent').checked;
   el('track').disabled = busy || !clip.live || !el('consent').checked;
   el('gap').disabled = busy || !gaps;
-  el('draw').disabled = busy;
+  el('draw').disabled = busy || paintedFrame !== current;
   el('clear').disabled = busy;
   el('remove').disabled = busy;
   el('approve').disabled = busy || gaps > 0;
@@ -111,6 +112,8 @@ async function paint() {
     const frame = await frameImage(index);
     if (request !== previewRequest) return;
     context.drawImage(frame, 0, 0, canvas.width, canvas.height);
+    paintedFrame = index;
+    el('draw').disabled = busy;
     if (!original && !drawing && clip.frames[index].box) fillBox(clip.frames[index].box);
     if (drag) {
       const [x, y, right, bottom] = rectangle(drag.start, drag.end);
@@ -129,6 +132,10 @@ async function paint() {
 
 function seek(index) {
   current = Math.max(0, Math.min(clip.count - 1, index));
+  if (paintedFrame !== current) {
+    paintedFrame = -1;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+  }
   el('through').value = current + 1;
   update();
   return paint();
@@ -171,6 +178,7 @@ el('upload').addEventListener('change', event => {
     clip = { ...await result.json(), name: file.name };
     if (previous) void call(`/api/jobs/${previous.id}`, { method: 'DELETE' }).catch(() => {});
     images = new Map();
+    paintedFrame = -1;
     canvas.width = clip.width;
     canvas.height = clip.height;
     original = false;
@@ -267,7 +275,7 @@ function point(event) {
 }
 
 canvas.addEventListener('pointerdown', event => {
-  if (!drawing || !event.isPrimary || event.button !== 0) return;
+  if (!drawing || paintedFrame !== current || !event.isPrimary || event.button !== 0) return;
   canvas.setPointerCapture(event.pointerId);
   const start = point(event);
   drag = { start, end: start };

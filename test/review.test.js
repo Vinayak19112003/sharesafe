@@ -34,6 +34,9 @@ test('SAM uses source frame indices and leaves missed or ambiguous frames unreso
     { box: [12, 12, 38, 38], state: 'suggested' }, { box: null, state: 'gap' },
     { box: [12, 12, 38, 38], state: 'uncertain' }, { box: null, state: 'gap' },
   ]);
+  assert.deepEqual(parseSam(`<0f>${record(1)}<2f>${record(1)}`, shape).map(frame => frame.state),
+    ['suggested', 'gap', 'suggested', 'gap']);
+  assert.deepEqual(parseSam(`<0f>${record(1).replace('abc', 'abc<99f>abc')}`, shape)[0], frames[0]);
   assert.throws(() => parseSam(`<4f>${record(1)}`, shape), /indices/);
   assert.throws(() => parseSam(`<0f>${record(1).replace('w=100', 'w=99')}`, shape), /dimensions/);
 });
