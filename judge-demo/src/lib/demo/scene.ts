@@ -26,7 +26,7 @@ export function damageRect(f: number): Rect {
   return { x: p.x + 232, y: p.y + 132, w: 68, h: 68 };
 }
 export function occluderRect(f: number): Rect {
-  return { x: Math.round(171 + (f - 18) * 30), y: 40, w: 200, h: 330 };
+  return { x: Math.round(171 + (f - 18) * 30), y: 40, w: 200, h: 174 };
 }
 
 export function contains(outer: Rect, inner: Rect) {

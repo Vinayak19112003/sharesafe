@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PREPARED_TRACKING, evaluate, frameFullyCovered, initialState, reducer } from "@/lib/demo/editor";
-import { GAP_FRAMES, REQUIRED_FRAMES, damageRect, intersectArea, labelRect } from "@/lib/demo/scene";
+import { FRAME_COUNT, GAP_FRAMES, REQUIRED_FRAMES, damageRect, intersectArea, labelRect, occluderRect } from "@/lib/demo/scene";
 import { pickMime, sanitizeFilename } from "@/lib/demo/export";
 
 const fixAll = () => GAP_FRAMES.reduce((s, f) => reducer(s, { type: "applySuggested", frame: f }), initialState());
@@ -16,6 +16,17 @@ describe("sample fixture", () => {
   it("label and damage never overlap and tracked boxes avoid damage", () => {
     for (const f of REQUIRED_FRAMES) expect(intersectArea(labelRect(f), damageRect(f))).toBe(0);
     for (const [f, r] of Object.entries(PREPARED_TRACKING)) expect(intersectArea(r, damageRect(+f))).toBe(0);
+  });
+});
+
+describe("occluder geometry", () => {
+  it("the arm never overlaps the damaged corner in any of the 42 frames", () => {
+    expect(FRAME_COUNT).toBe(42);
+    for (let f = 0; f < FRAME_COUNT; f++) expect(intersectArea(occluderRect(f), damageRect(f))).toBe(0);
+  });
+  it("keeps 41 required frames and the same 3 gap frames", () => {
+    expect(REQUIRED_FRAMES.length).toBe(41);
+    expect(GAP_FRAMES).toEqual([26, 27, 28]);
   });
 });
 
