@@ -354,7 +354,9 @@ async function initLiveDemo() {
   el('page-title').textContent = 'Redact a location clue';
   el('page-description').textContent = 'Hide the stop sign, keep the orange cone visible, then export a redacted MP4.';
   el('system').textContent = 'Loading sample';
+  el('home-link').href = '/live-demo';
   el('choose').hidden = true;
+  el('upload').hidden = true;
   el('remove').hidden = true;
   el('clear').hidden = true;
   el('ai').hidden = true;
