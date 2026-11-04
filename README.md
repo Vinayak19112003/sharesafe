@@ -35,7 +35,7 @@ docker build -t sharesafe .
 docker run --rm -p 127.0.0.1:3000:3000 sharesafe
 ```
 
-For an HTTPS demo hosted on Docker Agentic Platform, set a strong `SHARESAFE_DEMO_PASSWORD` in the server environment before opening the sandbox port. The sign-in username is `judge`. Keep `META_MODEL_API_KEY` on the server and use the provider's host-scoped secret configuration when available. Live Meta mode requires the password when the app binds to a non-loopback address.
+For an HTTPS demo hosted on Docker Agentic Platform, set a strong `SHARESAFE_DEMO_PASSWORD` in the server environment before opening the sandbox port. Open the HTTPS URL and enter the demo password on the ShareSafe sign-in page. Keep `META_MODEL_API_KEY` on the server and use the provider's host-scoped secret configuration when available. Live Meta mode requires the password when the app binds to a non-loopback address.
 
 ## Verify
 

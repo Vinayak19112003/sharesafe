@@ -36,13 +36,14 @@ const unresolved = frame => frame.state === 'gap' || frame.state === 'uncertain'
 
 function update() {
   el('choose').disabled = busy;
+  el('choose-empty').disabled = busy;
   el('upload').disabled = busy;
   el('workspace').hidden = !clip;
   el('welcome').hidden = !!clip;
   if (!clip) return;
   const frame = clip.frames[current];
   const gaps = clip.frames.filter(unresolved).length;
-  el('source').textContent = `UPLOADED CLIP / ${clip.name} / ${clip.count} FRAMES`;
+  el('source').textContent = `${clip.name} · ${clip.count} frames`;
   el('scrub').max = clip.count - 1;
   el('scrub').value = current;
   el('through').min = current + 1;
@@ -52,7 +53,7 @@ function update() {
   el('frame-state').classList.toggle('review', unresolved(frame));
   el('review-copy').textContent = gaps ? `${gaps} frame${gaps === 1 ? '' : 's'} need a review decision.` : 'All frames have a decision. Play the clip to verify the cover and evidence.';
   el('preserve-hint').textContent = el('preserve').value.trim() ? 'Keep visible: ' + el('preserve').value.trim() : '';
-  el('live-status').textContent = clip.live ? 'KEY CONFIGURED' : 'MANUAL MODE';
+  el('live-status').textContent = clip.live ? 'Available' : 'Manual only';
   el('plan').disabled = busy || !clip.live || !el('consent').checked;
   el('track').disabled = busy || !clip.live || !el('consent').checked;
   el('gap').disabled = busy || !gaps;
@@ -167,7 +168,7 @@ async function task(message, work) {
   }
 }
 
-el('choose').addEventListener('click', () => el('upload').click());
+for (const id of ['choose', 'choose-empty']) el(id).addEventListener('click', () => el('upload').click());
 el('upload').addEventListener('change', event => {
   const file = event.target.files[0];
   event.target.value = '';
@@ -331,5 +332,5 @@ el('export').addEventListener('click', () => void task('Rendering a silent MP4 w
 }));
 
 call('/api/status').then(response => response.json()).then(({ live }) => {
-  el('system').textContent = live ? 'META API CONFIGURED' : 'MANUAL MODE AVAILABLE';
+  el('system').textContent = live ? 'Meta connected' : 'Manual review';
 }).catch(() => {});

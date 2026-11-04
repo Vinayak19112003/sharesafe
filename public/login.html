@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7f3">
+  <title>Sign in · ShareSafe</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="login-page">
+  <header class="top">
+    <a class="brand" href="/" aria-label="ShareSafe home"><span class="mark" aria-hidden="true"><i></i></span>ShareSafe</a>
+    <span class="top-divider" aria-hidden="true"></span>
+    <span class="top-label">Video redaction</span>
+    <span class="system">Private demo</span>
+  </header>
+  <main class="login-layout">
+    <section class="login-copy">
+      <p class="kicker">VIDEO REDACTION</p>
+      <h1>Keep the evidence.<br>Cover the details.</h1>
+      <p>Review a clip frame by frame before you share it.</p>
+      <div class="diagram" aria-hidden="true">
+        <div class="diagram-bar"><span>FRAME 048</span><span>00:04.00</span></div>
+        <svg viewBox="0 0 460 232" class="diagram-image" fill="none">
+          <path d="M0 57H460M0 116H460M0 175H460M114 0V232M230 0V232M346 0V232" stroke="#393d3d"/>
+          <path d="M89 81 157 41H328L365 81V177H89V81Z" fill="#c5a77e" stroke="#d6ba96" stroke-width="2"/>
+          <path d="M89 81H365M328 41l-33 40v96M195 41l-7 40v96" stroke="#ad8d65" stroke-width="2"/>
+          <path d="M311 145l17-10 8 12 18 5-9 21h-29Z" fill="#775846"/>
+          <rect x="117" y="101" width="106" height="49" rx="2" fill="#222526"/>
+          <rect x="111" y="95" width="118" height="61" rx="3" stroke="#f0a071" stroke-width="2" stroke-dasharray="5 4"/>
+          <path d="M286 126h70m0 0v13m-70-13v13m0 42h70m0 0v-13m-70 13v-13" stroke="#a9c9b7" stroke-width="2"/>
+        </svg>
+        <div class="diagram-caption"><span><i class="key orange"></i> Cover shipping label</span><span><i class="key green"></i> Keep damage visible</span></div>
+      </div>
+    </section>
+    <section class="panel login-card" aria-labelledby="login-title">
+      <p class="kicker">DEMO ACCESS</p>
+      <h2 id="login-title">Open the workspace</h2>
+      <p>Use the ShareSafe demo password.</p>
+      <!-- LOGIN_ERROR -->
+      <form method="post" action="/login">
+        <label for="password">Demo password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+        <button type="submit" class="primary wide">Open workspace <span aria-hidden="true">→</span></button>
+      </form>
+    </section>
+  </main>
+  <footer><span>ShareSafe</span><span>Evidence review workspace</span></footer>
+</body>
+</html>

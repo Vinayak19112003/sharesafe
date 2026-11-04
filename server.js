@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -18,6 +18,36 @@ const meta = apiKey ? metaClient(apiKey) : null;
 const demoPassword = process.env.SHARESAFE_DEMO_PASSWORD;
 const digest = value => createHash('sha256').update(value).digest();
 const expectedAuth = demoPassword && digest('Basic ' + Buffer.from('judge:' + demoPassword).toString('base64'));
+const passwordDigest = demoPassword && digest(demoPassword);
+const cookieKey = randomBytes(32);
+const cookieName = 'sharesafe_session';
+const sessionSeconds = 8 * 60 * 60;
+const signSession = value => createHmac('sha256', cookieKey).update(value).digest('hex');
+
+function signedIn(request) {
+  if (!expectedAuth) return true;
+  if (timingSafeEqual(expectedAuth, digest(request.headers.authorization ?? ''))) return true;
+  const cookie = request.headers.cookie?.match(/(?:^|;\s*)sharesafe_session=(\d+\.[a-f0-9]{32})\.([a-f0-9]{64})(?:;|$)/);
+  return !!cookie && Number(cookie[1].split('.')[0]) > Date.now()
+    && timingSafeEqual(Buffer.from(signSession(cookie[1]), 'hex'), Buffer.from(cookie[2], 'hex'));
+}
+
+function setSession(request, response) {
+  const value = `${Date.now() + sessionSeconds * 1000}.${randomBytes(16).toString('hex')}`;
+  const secure = process.env.HOST === '0.0.0.0'
+    || request.headers['x-forwarded-proto']?.split(',')[0].trim() === 'https';
+  response.writeHead(303, {
+    Location: '/',
+    'Set-Cookie': `${cookieName}=${value}.${signSession(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${secure ? '; Secure' : ''}`,
+  }).end();
+}
+
+async function loginPage(response, rejected = false) {
+  const html = await readFile(join(ROOT, 'public', 'login.html'), 'utf8');
+  const error = rejected ? '<p class="notice error" role="alert">That password did not match. Try again.</p>' : '';
+  response.writeHead(rejected ? 401 : 200, { 'Content-Type': 'text/html; charset=utf-8' });
+  response.end(html.replace('<!-- LOGIN_ERROR -->', error));
+}
 const jobs = new Map();
 let preparing = 0;
 
@@ -136,17 +166,23 @@ const server = createServer(async (request, response) => {
   response.setHeader('Cache-Control', 'no-store');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'no-referrer');
-  if (expectedAuth && !timingSafeEqual(expectedAuth, digest(request.headers.authorization ?? ''))) {
-    response.setHeader('WWW-Authenticate', 'Basic realm="ShareSafe"');
-    return json(response, 401, { error: 'Sign in to the ShareSafe demo.' });
-  }
-  response.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+  response.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
   try {
     const path = new URL(request.url, 'http://localhost').pathname;
     const { method } = request;
     if (['POST', 'DELETE'].includes(method)
         && request.headers['sec-fetch-site'] && request.headers['sec-fetch-site'] !== 'same-origin') {
       throw new HttpError(403, 'Open the app directly to make changes.');
+    }
+    if (method === 'POST' && path === '/login' && passwordDigest) {
+      const form = new URLSearchParams((await body(request, 4096)).toString());
+      const password = form.get('password') ?? '';
+      if (!timingSafeEqual(passwordDigest, digest(password))) return await loginPage(response, true);
+      return setSession(request, response);
+    }
+    if (!signedIn(request) && !(method === 'GET' && path === '/style.css')) {
+      if (method === 'GET' && path === '/') return await loginPage(response);
+      return json(response, 401, { error: 'Open the ShareSafe sign-in page to continue.' });
     }
     if (method === 'GET' && Object.hasOwn(staticFiles, path)) {
       const [file, type] = staticFiles[path];
